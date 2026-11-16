@@ -1,4 +1,4 @@
-# Produktivbetrieb auf dem VPS (/srv/fmz).
+# Produktivbetrieb auf dem VPS (/srv/noeaux/fmz).
 # Caddy läuft als eigener Stack (/srv/noeaux/proxy) und erreicht die App über das Netz "edge"
 # unter http://fmz:8787 – dort gehen sowohl die Seite als auch der WebSocket (/ws) durch.
 # Kein Volume: Spielstände leben nur im Arbeitsspeicher und in den Browsern der Mitspieler.

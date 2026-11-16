@@ -44,15 +44,15 @@ Die App läuft als Docker-Container `fmz` hinter dem zentralen Caddy (Netz `edge
 Erstes Einrichten auf dem Server:
 
 ```bash
-git clone https://github.com/btruestedt/fuenfmalzwoelf.git /srv/fmz
-cd /srv/fmz
+git clone https://github.com/btruestedt/fuenfmalzwoelf.git /srv/noeaux/fmz
+cd /srv/noeaux/fmz
 docker compose up -d --build
 ```
 
 Aktualisieren:
 
 ```bash
-cd /srv/fmz && git pull && docker compose up -d --build
+cd /srv/noeaux/fmz && git pull && docker compose up -d --build
 ```
 
 Ein Neustart beendet laufende Verbindungen nur kurz: Die Geräte verbinden sich neu und bringen den
