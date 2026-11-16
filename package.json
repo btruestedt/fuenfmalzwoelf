@@ -1,0 +1,21 @@
+{
+  "name": "wuerfelspiel",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "server": "node server/server.js",
+    "test": "node --test",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "cannon-es": "^0.20.0",
+    "three": "^0.170.0",
+    "vite": "^6.0.0"
+  }
+}

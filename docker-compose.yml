@@ -1,0 +1,21 @@
+# Produktivbetrieb auf dem VPS (/srv/fmz).
+# Caddy läuft als eigener Stack (/srv/noeaux/proxy) und erreicht die App über das Netz "edge"
+# unter http://fmz:8787 – dort gehen sowohl die Seite als auch der WebSocket (/ws) durch.
+# Kein Volume: Spielstände leben nur im Arbeitsspeicher und in den Browsern der Mitspieler.
+name: fmz
+
+services:
+  app:
+    build: .
+    container_name: fmz
+    restart: unless-stopped
+    ports:
+      # Nur lokal auf dem Server (für Prüfungen per curl); öffentlich nur über Caddy.
+      - "127.0.0.1:8787:8787"
+    networks:
+      - edge
+
+networks:
+  # Gemeinsames Netz mit Caddy (angelegt vom Proxy-Stack).
+  edge:
+    external: true

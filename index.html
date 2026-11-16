@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#07130d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>Fünf mal Zwölf</title>
+  </head>
+  <body>
+    <div id="app">
+      <section id="home" class="screen">
+        <div class="card">
+          <p class="eyebrow">Ein Würfelspiel für Freunde</p>
+          <h1>Fünf mal Zwölf</h1>
+          <p class="lead">Sammle jede Zahl von 1 bis 12 fünfmal – mit sechs Würfeln, einzeln oder als Paar.</p>
+
+          <label class="field">
+            <span>Dein Name</span>
+            <input id="name" maxlength="14" autocomplete="nickname" placeholder="Name" />
+          </label>
+
+          <button class="btn" data-act="create">Neues Spiel eröffnen</button>
+
+          <div class="join">
+            <input id="code" maxlength="8" autocapitalize="characters" autocomplete="off" placeholder="Code" aria-label="Raumcode" />
+            <button class="btn ghost" data-act="join">Beitreten</button>
+          </div>
+
+          <div class="or"><span>oder</span></div>
+          <button class="btn ghost" data-act="local">An einem Gerät spielen</button>
+          <p id="home-error" class="error" hidden></p>
+        </div>
+      </section>
+
+      <section id="wait" class="screen" hidden>
+        <div class="card">
+          <h2 id="wait-title">Verbinde …</h2>
+          <button class="btn ghost" data-act="leave">Abbrechen</button>
+        </div>
+      </section>
+
+      <section id="lobby" class="screen" hidden></section>
+
+      <section id="game" hidden>
+        <header id="score"></header>
+        <div id="table">
+          <div id="toast"></div>
+          <div id="offline" hidden>Verbindung unterbrochen – verbinde neu …</div>
+        </div>
+        <footer id="controls"></footer>
+      </section>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

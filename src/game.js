@@ -1,0 +1,232 @@
+// Reine Spiellogik – ohne DOM, ohne Netzwerk. Der Zustand ist reines JSON,
+// damit er unverändert zwischen den Geräten verschickt werden kann.
+// Alle Aktionen verändern den übergebenen Zustand und liefern false,
+// wenn sie im aktuellen Zustand nicht erlaubt sind.
+
+export const NEED = 5; // so oft muss jede Zahl gesammelt werden
+export const MAXN = 12; // Zahlen 1..12
+export const NDICE = 6;
+export const MAX_PLAYERS = 8;
+
+const emptySheet = () => Array(MAXN + 1).fill(0); // Index 0 bleibt ungenutzt
+const freshDice = () =>
+  Array.from({ length: NDICE }, (_, id) => ({ id, v: null, taken: false, g: null }));
+const freshTurn = () => ({ dice: freshDice(), target: null, step: 'roll', options: null, groups: 0 });
+
+export function newGame() {
+  return { v: 0, phase: 'lobby', players: [], current: 0, start: null, turn: null, events: [], winner: null };
+}
+
+export function addPlayer(s, id, name) {
+  if (s.phase !== 'lobby' || s.players.length >= MAX_PLAYERS) return false;
+  if (s.players.some((p) => p.id === id)) return false;
+  s.players.push({ id, name, sheet: emptySheet() });
+  return true;
+}
+
+export function removePlayer(s, id) {
+  if (s.phase !== 'lobby') return false;
+  const i = s.players.findIndex((p) => p.id === id);
+  if (i < 0) return false;
+  s.players.splice(i, 1);
+  return true;
+}
+
+/** Startet eine (neue) Partie: Bögen leeren, Startwurf ansetzen. */
+export function begin(s) {
+  if (!s.players.length || s.phase === 'start' || s.phase === 'play') return false;
+  s.players.forEach((p) => (p.sheet = emptySheet()));
+  s.winner = null;
+  s.events = [];
+  if (s.players.length === 1) {
+    s.phase = 'play';
+    s.current = 0;
+    s.start = null;
+    s.turn = freshTurn();
+  } else {
+    s.phase = 'start';
+    s.turn = null;
+    s.start = { contenders: s.players.map((p) => p.id), rolls: {}, shown: {} };
+  }
+  return true;
+}
+
+/** Startwurf mit einem Würfel; bei Gleichstand würfeln nur die Besten erneut. */
+export function startRoll(s, pid, value) {
+  if (s.phase !== 'start') return false;
+  const st = s.start;
+  if (!st.contenders.includes(pid) || st.rolls[pid] != null) return false;
+  s.events = [];
+  st.rolls[pid] = value;
+  st.shown[pid] = value;
+  if (st.contenders.every((id) => st.rolls[id] != null)) {
+    const max = Math.max(...st.contenders.map((id) => st.rolls[id]));
+    const top = st.contenders.filter((id) => st.rolls[id] === max);
+    if (top.length === 1) {
+      s.current = s.players.findIndex((p) => p.id === top[0]);
+      s.phase = 'play';
+      s.turn = freshTurn();
+      s.events.push({ kind: 'starter', pid: top[0] });
+    } else {
+      st.contenders = top;
+      st.rolls = {};
+      s.events.push({ kind: 'tie', pids: top });
+    }
+  }
+  return true;
+}
+
+/**
+ * Alle Treffer für eine Zielzahl: einzelne Würfel (nur 1–6) und Zweierpaare.
+ * Einzelwürfel und die verschiedenen Paar-Typen nutzen jeweils andere Augenzahlen,
+ * deshalb ist die maximale Trefferzahl eindeutig.
+ */
+export function hitGroups(dice, target) {
+  const by = {};
+  for (const d of dice) (by[d.v] ||= []).push(d.id);
+  const out = [];
+  if (target <= 6) for (const id of by[target] || []) out.push({ key: `${target}`, ids: [id] });
+  for (let a = 1; a <= target / 2; a++) {
+    const b = target - a;
+    if (b > 6) continue;
+    const A = by[a] || [];
+    const B = by[b] || [];
+    if (a === b) {
+      for (let i = 0; i + 1 < A.length; i += 2) out.push({ key: `${a}+${b}`, ids: [A[i], A[i + 1]] });
+    } else {
+      for (let i = 0; i < Math.min(A.length, B.length); i++) out.push({ key: `${a}+${b}`, ids: [A[i], B[i]] });
+    }
+  }
+  return out;
+}
+
+/** Offene Zahlen, die sich mit den gegebenen Würfeln sammeln lassen. */
+export function numberOptions(sheet, dice) {
+  const out = [];
+  for (let n = 1; n <= MAXN; n++) {
+    if (sheet[n] >= NEED) continue;
+    const g = hitGroups(dice, n).length;
+    if (g) out.push({ n, hits: Math.min(g, NEED - sheet[n]) });
+  }
+  return out;
+}
+
+export const activeDice = (turn) => turn.dice.filter((d) => !d.taken);
+export const currentPlayer = (s) => s.players[s.current];
+
+/** Wurf des aktuellen Spielers; values gehört zu den noch nicht herausgelegten Würfeln. */
+export function roll(s, values) {
+  if (s.phase !== 'play' || s.turn.step !== 'roll') return false;
+  const act = activeDice(s.turn);
+  if (values.length !== act.length) return false;
+  s.events = [];
+  act.forEach((d, i) => (d.v = values[i]));
+  if (s.turn.target == null) return offerNumbers(s, 'bust');
+  const groups = hitGroups(act, s.turn.target);
+  if (!groups.length) return endTurn(s, 'bust');
+  return take(s, groups);
+}
+
+export function chooseNumber(s, n) {
+  if (s.phase !== 'play' || s.turn.step !== 'chooseNumber') return false;
+  if (!s.turn.options.some((o) => o.n === n)) return false;
+  s.events = [];
+  s.turn.target = n;
+  return take(s, hitGroups(activeDice(s.turn), n));
+}
+
+/** Nur nötig, wenn mehr Treffer liegen als noch gebraucht werden. */
+export function chooseHits(s, index) {
+  if (s.phase !== 'play' || s.turn.step !== 'chooseHits') return false;
+  const opt = s.turn.options[index];
+  if (!opt) return false;
+  s.events = [];
+  return commit(s, opt.groups.map((ids) => ({ ids })));
+}
+
+function offerNumbers(s, reasonIfNone) {
+  const t = s.turn;
+  const opts = numberOptions(currentPlayer(s).sheet, activeDice(t));
+  if (!opts.length) return endTurn(s, reasonIfNone);
+  t.target = null;
+  t.step = 'chooseNumber';
+  t.options = opts;
+  return true;
+}
+
+function take(s, groups) {
+  const t = s.turn;
+  const need = NEED - currentPlayer(s).sheet[t.target];
+  if (groups.length <= need) return commit(s, groups); // alle Treffer müssen genommen werden
+  const cs = combos(groups, need);
+  if (cs.length === 1) return commit(s, cs[0]);
+  t.step = 'chooseHits';
+  t.options = cs.map((c) => ({ groups: c.map((g) => g.ids) }));
+  return true;
+}
+
+/** Alle unterscheidbaren Möglichkeiten, `need` Treffer aus den Gruppen zu wählen. */
+function combos(groups, need) {
+  const types = [];
+  for (const g of groups) {
+    const t = types.find((x) => x.key === g.key);
+    if (t) t.list.push(g);
+    else types.push({ key: g.key, list: [g] });
+  }
+  const out = [];
+  const walk = (i, left, acc) => {
+    if (left === 0) return void out.push(acc);
+    if (i >= types.length) return;
+    for (let k = Math.min(left, types[i].list.length); k >= 0; k--) {
+      walk(i + 1, left - k, acc.concat(types[i].list.slice(0, k)));
+    }
+  };
+  walk(0, need, []);
+  return out;
+}
+
+function commit(s, groups) {
+  const t = s.turn;
+  const p = currentPlayer(s);
+  for (const g of groups) {
+    for (const id of g.ids) {
+      t.dice[id].taken = true;
+      t.dice[id].g = t.groups;
+    }
+    t.groups++;
+  }
+  p.sheet[t.target] += groups.length;
+  const done = p.sheet[t.target] >= NEED;
+  s.events.push({ kind: 'take', pid: p.id, n: t.target, count: groups.length, done });
+  t.options = null;
+
+  if (p.sheet.slice(1).every((c) => c >= NEED)) {
+    s.phase = 'over';
+    s.winner = p.id;
+    t.step = 'done';
+    s.events.push({ kind: 'win', pid: p.id });
+    return true;
+  }
+
+  const left = activeDice(t);
+  if (done) t.target = null;
+  if (!left.length) {
+    // Alle Würfel verbraucht: wieder mit allen sechs würfeln.
+    t.dice = freshDice();
+    t.groups = 0;
+    t.step = 'roll';
+    s.events.push({ kind: 'allUsed', pid: p.id });
+    return true;
+  }
+  if (done) return offerNumbers(s, 'noOption'); // neue Zahl aus den Restwürfeln, ohne zu würfeln
+  if (left.length === 1 && t.target > 6) return endTurn(s, 'hopeless');
+  t.step = 'roll';
+  return true;
+}
+
+function endTurn(s, reason) {
+  s.events.push({ kind: 'end', pid: currentPlayer(s).id, reason, n: s.turn.target });
+  s.current = (s.current + 1) % s.players.length;
+  s.turn = freshTurn();
+  return true;
+}
