@@ -25,6 +25,7 @@ export function newGame() {
     turn: null,
     events: [],
     winner: null,
+    history: [], // beendete Spiele der laufenden Folge, siehe scoreRound()
   };
 }
 
@@ -42,13 +43,14 @@ export function newSeries(s) {
   if (s.phase !== 'over') return false;
   s.players.forEach((p) => (p.total = 0));
   s.round = 0;
+  s.history = [];
   return begin(s);
 }
 
 export function addPlayer(s, id, name) {
   if (s.phase !== 'lobby' || s.players.length >= MAX_PLAYERS) return false;
   if (s.players.some((p) => p.id === id)) return false;
-  s.players.push({ id, name, sheet: emptySheet(), total: 0 });
+  s.players.push({ id, name, sheet: emptySheet(), total: 0, turns: 0, at12: null });
   return true;
 }
 
@@ -72,6 +74,16 @@ function scoreRound(s) {
   scores[s.winner] = pot;
   for (const p of s.players) p.total = (p.total || 0) + scores[p.id];
   s.scores = scores;
+  // Für die Spiele-Übersicht: Runden des Gewinners und wer die 12 in welcher Runde voll hatte.
+  const at12 = {};
+  for (const p of s.players) at12[p.id] = p.at12 ?? null;
+  (s.history ||= []).push({
+    round: s.round,
+    winner: s.winner,
+    turns: s.players.find((p) => p.id === s.winner).turns || 0,
+    at12,
+    scores,
+  });
 }
 
 export function removePlayer(s, id) {
@@ -86,7 +98,11 @@ export function removePlayer(s, id) {
 export function begin(s) {
   if (!s.players.length || s.phase === 'start' || s.phase === 'play') return false;
   if (s.phase === 'over' && seriesDone(s)) return false; // dann nur noch newSeries()
-  s.players.forEach((p) => (p.sheet = emptySheet()));
+  s.players.forEach((p) => {
+    p.sheet = emptySheet();
+    p.turns = 0; // so oft war der Spieler in diesem Spiel an der Reihe („Runden“)
+    p.at12 = null; // Runde, in der die 12 voll wurde
+  });
   s.winner = null;
   s.scores = null;
   s.round = (s.round || 0) + 1;
@@ -173,6 +189,12 @@ export function roll(s, values) {
   const act = activeDice(s.turn);
   if (values.length !== act.length) return false;
   s.events = [];
+  if (!s.turn.counted) {
+    // Erster Wurf dieses Zugs: Für den Spieler beginnt eine neue Runde.
+    s.turn.counted = true;
+    const p = currentPlayer(s);
+    p.turns = (p.turns || 0) + 1;
+  }
   act.forEach((d, i) => (d.v = values[i]));
   if (s.turn.target == null) return offerNumbers(s, 'bust');
   const groups = hitGroups(act, s.turn.target);
@@ -250,6 +272,7 @@ function commit(s, groups) {
   }
   p.sheet[t.target] += groups.length;
   const done = p.sheet[t.target] >= NEED;
+  if (done && t.target === MAXN) p.at12 = p.turns;
   s.events.push({ kind: 'take', pid: p.id, n: t.target, count: groups.length, done });
   t.options = null;
 

@@ -18,6 +18,10 @@ bekommen sie als Minuspunkte, der Gewinner erhält die Summe als Pluspunkte.
 Spielfolge: In der Lobby legt man fest, wie viele Spiele eine Folge umfasst (1, 5, 10 oder 20). Die
 Punkte werden über die Folge addiert; wer am Ende vorn liegt, gewinnt die Folge.
 
+Runden: Mitgezählt wird, wie oft jeder Spieler an der Reihe war. Am Spielende steht, in wie vielen Runden
+der Gewinner fertig war und in welcher eigenen Runde jemand die 12 voll hatte. Die Spiele-Übersicht (Tipp
+auf den Zähler „3/20“ oder am Spielende) zeigt das für alle Spiele der Folge.
+
 ## Pausieren und Fortsetzen
 
 Verlassen ist immer nur eine Pause, auch mitten in einem Spiel.

@@ -194,3 +194,45 @@ test('Solo-Spiel: kein Startwurf, nach Zugende wieder selbst dran', () => {
   assert.equal(s.turn.step, 'roll');
   assert.equal(G.activeDice(s.turn).length, 6);
 });
+
+test('Runden: gezählt wird je Zug; festgehalten wird, wann die 12 voll war und wie lange der Gewinner brauchte', () => {
+  const s = started();
+  const [a, b] = s.players;
+  G.roll(s, [1, 1, 2, 2, 3, 3]);
+  G.chooseNumber(s, 1); // zwei 1er, weiter mit vier Würfeln
+  G.roll(s, [2, 2, 3, 3]); // kein Treffer: B ist dran
+  assert.equal(a.turns, 1);
+  assert.equal(s.current, 1);
+
+  b.sheet[12] = 3;
+  G.roll(s, [6, 6, 6, 6, 1, 2]);
+  G.chooseNumber(s, 12); // 12 voll in Bs erster Runde, weiter aus den Restwürfeln
+  assert.equal(b.at12, 1);
+  G.chooseNumber(s, 1);
+  G.roll(s, [4]); // kein Treffer: A ist dran
+  assert.equal(b.turns, 1);
+
+  for (let n = 1; n <= 12; n++) a.sheet[n] = 5;
+  a.sheet[12] = 4;
+  G.roll(s, [6, 6, 1, 2, 3, 4]);
+  G.chooseNumber(s, 12);
+  assert.equal(s.phase, 'over');
+  assert.deepEqual(s.history.map((h) => [h.round, h.winner, h.turns, h.at12]), [[1, 'A', 2, { A: 2, B: 1 }]]);
+
+  // Das nächste Spiel zählt von vorn, die Übersicht wächst; eine neue Folge leert sie.
+  G.begin(s);
+  assert.deepEqual([a.turns, a.at12, b.turns, b.at12], [0, null, 0, null]);
+  assert.equal(s.history.length, 1);
+});
+
+test('Runden: Weiterwürfeln mit sechs neuen Würfeln bleibt dieselbe Runde', () => {
+  const s = started(['Solo']);
+  G.roll(s, [1, 1, 1, 2, 2, 2]);
+  G.chooseNumber(s, 3); // drei Paare, alle Würfel verbraucht
+  assert.equal(G.activeDice(s.turn).length, 6);
+  G.roll(s, [1, 2, 4, 4, 4, 4]);
+  assert.equal(s.players[0].turns, 1);
+  G.roll(s, [4, 4, 4, 4]); // kein Treffer, nächste Runde
+  G.roll(s, [6, 6, 6, 6, 6, 6]);
+  assert.equal(s.players[0].turns, 2);
+});

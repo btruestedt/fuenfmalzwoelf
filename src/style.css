@@ -330,6 +330,7 @@ input::placeholder {
   height: 100dvh;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 #score {
@@ -345,6 +346,7 @@ input::placeholder {
 
 .chips {
   flex: 1;
+  min-width: 0;
   display: flex;
   gap: 6px;
   overflow-x: auto;
@@ -358,7 +360,7 @@ input::placeholder {
 
 .chip {
   appearance: none;
-  flex: 0 1 auto;
+  flex: none;
   min-width: 62px;
   max-width: 130px;
   padding: 6px 12px 7px;
@@ -387,10 +389,17 @@ input::placeholder {
 }
 
 .round {
+  appearance: none;
   flex: none;
+  padding: 7px 9px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
   color: var(--muted);
+  font: inherit;
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
 }
 
 .chip .pg {
@@ -670,13 +679,14 @@ input::placeholder {
 }
 
 .scores {
+  max-width: 100%;
   border-collapse: collapse;
   font-size: 0.95rem;
   color: var(--muted);
 }
 
 .scores th {
-  padding: 0 14px 2px;
+  padding: 0 9px 2px;
   font-size: 0.68rem;
   font-weight: 400;
   letter-spacing: 0.12em;
@@ -685,14 +695,14 @@ input::placeholder {
 }
 
 .scores td {
-  padding: 2px 14px;
+  padding: 2px 9px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
 .scores td:first-child {
   text-align: left;
-  max-width: 150px;
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -747,4 +757,87 @@ body.busy #controls button {
   margin: 0;
   color: rgba(155, 176, 162, 0.5);
   font-size: 0.7rem;
+}
+
+/* ---------- Spiele-Übersicht ---------- */
+
+.link {
+  appearance: none;
+  border: 0;
+  padding: 2px 6px;
+  background: none;
+  color: var(--gold-hi);
+  font: inherit;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+#overview {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: calc(16px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom));
+  background: rgba(2, 10, 6, 0.8);
+  backdrop-filter: blur(4px);
+}
+
+#overview .card {
+  width: min(100%, 560px);
+  max-height: 100%;
+  padding: 22px 14px;
+  background: #07130d;
+}
+
+.ovwrap {
+  min-height: 0;
+  overflow: auto;
+}
+
+.ov {
+  margin: 0 auto;
+  border-collapse: collapse;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ov th {
+  position: sticky;
+  top: 0;
+  max-width: 76px;
+  padding: 0 8px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: #07130d;
+  font-size: 0.68rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ov td {
+  padding: 5px 8px;
+  border-top: 1px solid rgba(201, 164, 92, 0.14);
+  white-space: nowrap;
+}
+
+.ov td b {
+  display: block;
+  font-weight: 400;
+}
+
+.ov td small {
+  display: block;
+  font-size: 0.68rem;
+  opacity: 0.75;
+}
+
+.ov td.win,
+.ov tr.sum td {
+  color: var(--gold-hi);
 }

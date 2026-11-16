@@ -43,6 +43,7 @@ const app = {
   pending: null, // zuletzt gesendete, noch nicht bestätigte Aktion
   viewPid: null, // angetippter Spieler, dessen Blatt gezeigt wird
   shake: false,
+  overview: false, // Spiele-Übersicht eingeblendet
 };
 store.set('pid', app.myId);
 
@@ -193,6 +194,7 @@ function leave(error = '') {
   app.net?.close();
   Object.assign(app, { mode: null, state: null, room: null, net: null, connected: false, peers: [], pending: null });
   queue.length = 0;
+  app.overview = false;
   history.replaceState(null, '', location.pathname);
   $('#home-error').textContent = error;
   $('#home-error').hidden = !error;
@@ -289,6 +291,47 @@ function render() {
   if (screen === 'home') renderHome();
   if (screen === 'lobby') renderLobby(s);
   if (screen === 'game') renderGame(s);
+  renderOverview(screen === 'game' ? s : null);
+}
+
+const rounds = (n) => (n === 1 ? 'einer Runde' : `${n} Runden`);
+
+/** Spiele-Übersicht: je Spiel die Punkte, die Runden des Gewinners und wer wann die 12 voll hatte. */
+function renderOverview(s) {
+  const el = $('#overview');
+  el.hidden = !s || !app.overview;
+  if (el.hidden) return;
+  const games = s.history || [];
+  const head = s.players.map((p) => `<th>${esc(p.name)}</th>`).join('');
+  const body = games
+    .map((h) => {
+      const cells = s.players
+        .map((p) => {
+          const at = h.at12?.[p.id];
+          return `<td class="${p.id === h.winner ? 'win' : ''}">
+              <b>${h.scores[p.id] == null ? '–' : pts(h.scores[p.id])}</b>
+              <small>${at ? `12 in R. ${at}` : '12 offen'}</small>
+            </td>`;
+        })
+        .join('');
+      return `<tr><td>${h.round}</td><td>${h.turns || '–'}</td>${cells}</tr>`;
+    })
+    .join('');
+  const sum = s.players.map((p) => `<td><b>${pts(p.total || 0)}</b></td>`).join('');
+  el.innerHTML = `<div class="card">
+      <h2>Spiele-Übersicht</h2>
+      ${
+        games.length
+          ? `<div class="ovwrap"><table class="ov">
+              <tr><th>Spiel</th><th>Runden</th>${head}</tr>
+              ${body}
+              <tr class="sum"><td colspan="2">Gesamt</td>${sum}</tr>
+            </table></div>
+            <p class="hint">Runden: so oft war der Gewinner an der Reihe. Klein darunter steht, in welcher eigenen Runde ein Spieler die 12 voll hatte.</p>`
+          : '<p class="hint">Noch ist kein Spiel dieser Folge beendet.</p>'
+      }
+      <button class="btn ghost small" data-act="overview">Schließen</button>
+    </div>`;
 }
 
 function renderHome() {
@@ -379,11 +422,15 @@ function renderGame(s) {
   }).join('');
   $('#score').innerHTML = `<div class="bar">
       <div class="chips">${chips}</div>
-      ${multi ? `<span class="round">${s.round}/${s.series}</span>` : ''}
+      ${multi ? `<button class="round" data-act="overview" aria-label="Spiele-Übersicht">${s.round}/${s.series}</button>` : ''}
       <button class="icon ${sound.isMuted() ? 'off' : ''}" data-act="mute" aria-label="Ton">♪</button>
       <button class="icon" data-act="leave" aria-label="Spiel verlassen">×</button>
     </div>
     <div class="sheet">${cells}</div>`;
+  // Passen nicht alle Spieler in die Leiste, wird sie geschoben: der Spieler am Zug bleibt sichtbar.
+  const chipsEl = $('#score .chips');
+  const turnChip = chipsEl.querySelector('.chip.turn');
+  if (turnChip) chipsEl.scrollLeft = Math.max(0, turnChip.offsetLeft + turnChip.offsetWidth - chipsEl.clientWidth + 2);
 
   $('#controls').innerHTML = controlsHTML(s);
   $('#offline').hidden = !online || app.connected;
@@ -447,6 +494,7 @@ function controlsHTML(s) {
               <td>${esc(p.name)}</td>
               <td>${pts(s.scores[p.id])}</td>
               ${showTotal ? `<td>${pts(p.total || 0)}</td>` : ''}
+              <td>${p.at12 ? `R. ${p.at12}` : '–'}</td>
             </tr>`,
           )
           .join('')
@@ -454,11 +502,15 @@ function controlsHTML(s) {
     const table =
       rows && s.players.length > 1
         ? `<table class="scores">
-            ${showTotal ? '<tr><th></th><th>Spiel</th><th>Gesamt</th></tr>' : ''}
+            <tr><th></th><th>${showTotal ? 'Spiel' : 'Punkte'}</th>${showTotal ? '<th>Gesamt</th>' : ''}<th>12 voll</th></tr>
             ${rows}
           </table>`
         : '';
-    let headline = `${mine ? 'Du hast' : `${esc(playerName(s.winner))} hat`} gewonnen!`;
+    const turns = s.players.find((p) => p.id === s.winner)?.turns;
+    const inRounds = turns ? ` in ${rounds(turns)}` : '';
+    const gameLine = `${mine ? 'Du hast' : `${esc(playerName(s.winner))} hat`}${inRounds} gewonnen`;
+    let headline = `${gameLine}!`;
+    let extra = '';
     if (done && multi && s.players.length > 1) {
       const best = Math.max(...s.players.map((p) => p.total || 0));
       const champs = s.players.filter((p) => (p.total || 0) === best);
@@ -468,12 +520,15 @@ function controlsHTML(s) {
           : isMe(champs[0].id)
             ? 'Du gewinnst die Spielfolge!'
             : `${esc(champs[0].name)} gewinnt die Spielfolge!`;
+      extra = `<p class="sub">Letztes Spiel: ${gameLine}</p>`;
     }
     return `${multi ? `<p class="sub">Spiel ${s.round} von ${s.series}${done ? ' – Folge beendet' : ''}</p>` : ''}
       <p class="status"><b>${headline}</b></p>
+      ${extra}
       ${table}
+      ${multi ? '<button class="link" data-act="overview">Spiele-Übersicht</button>' : ''}
       <div class="row">
-        <button class="btn" data-act="again">${done ? (multi ? 'Neue Spielfolge' : 'Neue Runde') : 'Nächstes Spiel'}</button>
+        <button class="btn" data-act="again">${done ? (multi ? 'Neue Spielfolge' : 'Neues Spiel') : 'Nächstes Spiel'}</button>
         <button class="btn ghost" data-act="leave">${done ? 'Beenden' : 'Pause'}</button>
       </div>`;
   }
@@ -564,6 +619,10 @@ const actions = {
     render();
   },
   update: applyUpdate,
+  overview() {
+    app.overview = !app.overview;
+    render();
+  },
   mute() {
     sound.setMuted(!sound.isMuted());
     render();
