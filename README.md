@@ -12,6 +12,10 @@ alle Treffer werden herausgelegt, mit dem Rest wird weitergewürfelt. Sind alle 
 wieder mit sechs weiter. Ist eine Zahl voll, wählt man aus den Restwürfeln (ohne neuen Wurf) die nächste.
 Kein Treffer: Der Nächste ist dran, Gesammeltes bleibt. Wer zuerst alles voll hat, gewinnt sofort.
 
+Wertung: Die Verlierer zählen ihre fehlenden Augen zusammen (jede fehlende Zahl mit ihrem Wert) und
+bekommen sie als Minuspunkte, der Gewinner erhält die Summe als Pluspunkte. Über mehrere Runden im
+selben Raum wird ein Gesamtstand mitgeführt.
+
 Die Regeln stehen vollständig in `src/game.js`, die Grenzfälle sind in `test/game.test.js` festgehalten.
 
 ## Entwickeln

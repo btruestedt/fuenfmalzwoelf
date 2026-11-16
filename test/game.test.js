@@ -133,6 +133,29 @@ test('Sieg, sobald die letzte Zahl voll ist; danach neue Runde möglich', () => 
   assert.equal(s.players[0].sheet[12], 0);
 });
 
+test('Wertung: fehlende Augen als Minuspunkte, der Gewinner bekommt die Summe', () => {
+  const s = started(['A', 'B', 'C']);
+  for (let n = 1; n <= 12; n++) s.players.forEach((p) => (p.sheet[n] = 5));
+  s.players[0].sheet[12] = 4;
+  s.players[1].sheet[7] = 3; // fehlen 2 × 7 = 14
+  s.players[1].sheet[1] = 0; // fehlen 5 × 1 = 5
+  s.players[2].sheet[12] = 4; // fehlt 1 × 12 = 12
+  G.roll(s, [6, 6, 1, 2, 3, 4]);
+  G.chooseNumber(s, 12);
+  assert.deepEqual(s.scores, { A: 31, B: -19, C: -12 });
+
+  // Die Gesamtpunkte laufen über mehrere Runden mit.
+  G.begin(s);
+  ['A', 'B', 'C'].forEach((id, i) => G.startRoll(s, id, 6 - i));
+  assert.equal(s.scores, null);
+  for (let n = 1; n <= 12; n++) s.players[0].sheet[n] = 5;
+  s.players[0].sheet[12] = 4;
+  G.roll(s, [6, 6, 1, 2, 3, 4]);
+  G.chooseNumber(s, 12);
+  const perLoser = 5 * (12 * 13) / 2; // leeres Blatt: 390
+  assert.deepEqual(s.players.map((p) => p.total), [31 + 2 * perLoser, -19 - perLoser, -12 - perLoser]);
+});
+
 test('Solo-Spiel: kein Startwurf, nach Zugende wieder selbst dran', () => {
   const s = started(['Solo']);
   assert.equal(s.phase, 'play');

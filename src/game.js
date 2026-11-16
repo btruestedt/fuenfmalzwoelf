@@ -20,8 +20,30 @@ export function newGame() {
 export function addPlayer(s, id, name) {
   if (s.phase !== 'lobby' || s.players.length >= MAX_PLAYERS) return false;
   if (s.players.some((p) => p.id === id)) return false;
-  s.players.push({ id, name, sheet: emptySheet() });
+  s.players.push({ id, name, sheet: emptySheet(), total: 0 });
   return true;
+}
+
+/** Fehlende Augen eines Blatts: jede noch fehlende Zahl zählt mit ihrem Wert. */
+export const missingPoints = (sheet) =>
+  sheet.reduce((sum, count, n) => sum + (n ? Math.max(0, NEED - count) * n : 0), 0);
+
+/**
+ * Wertung am Spielende: Verlierer bekommen ihre fehlenden Augen als Minuspunkte,
+ * der Gewinner die Summe davon als Pluspunkte. `total` läuft über mehrere Runden mit.
+ */
+function scoreRound(s) {
+  const scores = {};
+  let pot = 0;
+  for (const p of s.players) {
+    if (p.id === s.winner) continue;
+    const m = missingPoints(p.sheet);
+    scores[p.id] = -m;
+    pot += m;
+  }
+  scores[s.winner] = pot;
+  for (const p of s.players) p.total = (p.total || 0) + scores[p.id];
+  s.scores = scores;
 }
 
 export function removePlayer(s, id) {
@@ -37,6 +59,8 @@ export function begin(s) {
   if (!s.players.length || s.phase === 'start' || s.phase === 'play') return false;
   s.players.forEach((p) => (p.sheet = emptySheet()));
   s.winner = null;
+  s.scores = null;
+  s.round = (s.round || 0) + 1;
   s.events = [];
   if (s.players.length === 1) {
     s.phase = 'play';
@@ -204,6 +228,7 @@ function commit(s, groups) {
     s.phase = 'over';
     s.winner = p.id;
     t.step = 'done';
+    scoreRound(s);
     s.events.push({ kind: 'win', pid: p.id });
     return true;
   }

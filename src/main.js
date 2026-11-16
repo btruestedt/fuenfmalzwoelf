@@ -382,7 +382,29 @@ function controlsHTML(s) {
 
   if (s.phase === 'over') {
     const mine = isMe(s.winner);
+    const pts = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
+    const showTotal = (s.round || 1) > 1;
+    const rows = s.scores
+      ? [...s.players]
+          .sort((a, b) => s.scores[b.id] - s.scores[a.id])
+          .map(
+            (p) => `<tr class="${p.id === s.winner ? 'win' : ''}">
+              <td>${esc(p.name)}</td>
+              <td>${pts(s.scores[p.id])}</td>
+              ${showTotal ? `<td>${pts(p.total || 0)}</td>` : ''}
+            </tr>`,
+          )
+          .join('')
+      : '';
+    const table =
+      rows && s.players.length > 1
+        ? `<table class="scores">
+            ${showTotal ? '<tr><th></th><th>Runde</th><th>Gesamt</th></tr>' : ''}
+            ${rows}
+          </table>`
+        : '';
     return `<p class="status"><b>${mine ? 'Du hast' : `${esc(playerName(s.winner))} hat`} gewonnen!</b></p>
+      ${table}
       <div class="row">
         <button class="btn" data-act="again">Neue Runde</button>
         <button class="btn ghost" data-act="leave">Beenden</button>
@@ -521,6 +543,9 @@ $('#name').value = app.name;
 const invited = location.hash.slice(1).toUpperCase();
 if (/^[A-Z0-9]{4,8}$/.test(invited)) $('#code').value = invited;
 render();
+
+// Nur im Entwicklungsmodus: Zugriff auf den Zustand, um Spielsituationen gezielt herzustellen.
+if (import.meta.env.DEV) window.__dbg = { app, G, dispatch };
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});

@@ -614,6 +614,39 @@ input::placeholder {
   color: var(--ivory);
 }
 
+.scores {
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.scores th {
+  padding: 0 14px 2px;
+  font-size: 0.68rem;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: right;
+}
+
+.scores td {
+  padding: 2px 14px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.scores td:first-child {
+  text-align: left;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scores tr.win td {
+  color: var(--gold-hi);
+}
+
 .row {
   display: flex;
   gap: 10px;
