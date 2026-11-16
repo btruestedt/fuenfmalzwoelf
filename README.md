@@ -13,8 +13,22 @@ wieder mit sechs weiter. Ist eine Zahl voll, wählt man aus den Restwürfeln (oh
 Kein Treffer: Der Nächste ist dran, Gesammeltes bleibt. Wer zuerst alles voll hat, gewinnt sofort.
 
 Wertung: Die Verlierer zählen ihre fehlenden Augen zusammen (jede fehlende Zahl mit ihrem Wert) und
-bekommen sie als Minuspunkte, der Gewinner erhält die Summe als Pluspunkte. Über mehrere Runden im
-selben Raum wird ein Gesamtstand mitgeführt.
+bekommen sie als Minuspunkte, der Gewinner erhält die Summe als Pluspunkte.
+
+Spielfolge: In der Lobby legt man fest, wie viele Spiele eine Folge umfasst (1, 5, 10 oder 20). Die
+Punkte werden über die Folge addiert; wer am Ende vorn liegt, gewinnt die Folge.
+
+## Pausieren und Fortsetzen
+
+Verlassen ist immer nur eine Pause, auch mitten in einem Spiel.
+
+- **Online:** Der Server schreibt alle Räume in `data/rooms.json` (höchstens einmal pro Sekunde und beim
+  Beenden). Räume, die 90 Tage niemand benutzt hat, werden gelöscht. Der Browser merkt sich den letzten
+  Raum und bietet auf der Startseite „Raum … fortsetzen“ an; der Einladungslink funktioniert ebenfalls weiter.
+- **An einem Gerät:** Der Stand liegt im `localStorage` des Browsers.
+- **Anderes Gerät oder gelöschte Browserdaten:** Wer einen laufenden Raum betritt, ohne Mitspieler zu sein,
+  schaut zu und kann den Platz eines gerade abwesenden Spielers übernehmen. Eine Benutzerverwaltung gibt
+  es bewusst nicht.
 
 Die Regeln stehen vollständig in `src/game.js`, die Grenzfälle sind in `test/game.test.js` festgehalten.
 
@@ -37,7 +51,7 @@ npm test
 | `src/dice3d.js` | Three.js-Szene und Physik (cannon-es); der Wurf wird vorab simuliert und auf das feststehende Ergebnis „umetikettiert“ |
 | `src/sound.js` | Synthetisierte Klänge (Web Audio), keine Audiodateien |
 | `src/shake.js` | Schüttel-Erkennung (`devicemotion`, auf iOS mit Erlaubnis-Abfrage) |
-| `src/net.js`, `server/server.js` | Raum-Relay über WebSocket; der Server kennt keine Regeln und merkt sich nur den letzten Stand |
+| `src/net.js`, `server/server.js` | Raum-Relay über WebSocket; der Server kennt keine Regeln und speichert pro Raum nur den letzten Stand |
 | `src/main.js` | Oberfläche und Ablaufsteuerung |
 
 ## Auf den VPS bringen
@@ -50,6 +64,7 @@ Erstes Einrichten auf dem Server:
 ```bash
 git clone https://github.com/btruestedt/fuenfmalzwoelf.git /srv/noeaux/fmz
 cd /srv/noeaux/fmz
+mkdir -p data          # für die Spielstände; muss dem Benutzer mit UID 1000 gehören
 docker compose up -d --build
 ```
 
@@ -59,8 +74,8 @@ Aktualisieren:
 cd /srv/noeaux/fmz && git pull && docker compose up -d --build
 ```
 
-Ein Neustart beendet laufende Verbindungen nur kurz: Die Geräte verbinden sich neu und bringen den
-Spielstand wieder mit.
+Ein Neustart beendet laufende Verbindungen nur kurz: Die Geräte verbinden sich neu, die Spielstände
+kommen aus `data/rooms.json`.
 
 HTTPS ist Pflicht: Ohne gibt es weder Bewegungssensor noch Installation als App.
 

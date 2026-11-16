@@ -24,14 +24,14 @@ export class Net {
     const ws = (this.ws = new WebSocket(wsUrl()));
     ws.onopen = () => {
       this.tries = 0;
-      // Beim Wiederverbinden den eigenen Stand mitschicken: Falls der Server neu
-      // gestartet wurde und den Raum vergessen hat, lebt das Spiel damit weiter.
+      // Den eigenen (ggf. im Browser gespeicherten) Stand mitschicken: Sollte der Server
+      // den Raum nicht mehr kennen, lebt das Spiel damit weiter.
       this.send({
         t: 'join',
         room: this.room,
         pid: this.pid,
         create: this.create && !this.joined,
-        resume: this.joined ? this.getState() : null,
+        resume: this.create && !this.joined ? null : this.getState(),
       });
     };
     ws.onmessage = (e) => {

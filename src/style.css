@@ -204,6 +204,47 @@ input::placeholder {
   cursor: default;
 }
 
+#resume {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#resume:empty {
+  display: none;
+}
+
+.seg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.seg .lbl {
+  flex: 1;
+  text-align: left;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.seg button {
+  appearance: none;
+  min-width: 42px;
+  padding: 8px 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.seg button.on {
+  border-color: var(--gold);
+  background: rgba(201, 164, 92, 0.16);
+  color: var(--gold-hi);
+}
+
 .roomcode {
   font-family: var(--serif);
   font-size: 2.6rem;
@@ -336,6 +377,20 @@ input::placeholder {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.chip .nm em {
+  font-style: normal;
+  font-size: 0.85em;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.round {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .chip .pg {

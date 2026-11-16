@@ -156,6 +156,34 @@ test('Wertung: fehlende Augen als Minuspunkte, der Gewinner bekommt die Summe', 
   assert.deepEqual(s.players.map((p) => p.total), [31 + 2 * perLoser, -19 - perLoser, -12 - perLoser]);
 });
 
+test('Spielfolge: nach dem letzten Spiel geht es nur mit einer neuen Folge weiter', () => {
+  const s = G.newGame();
+  ['A', 'B'].forEach((n) => G.addPlayer(s, n, n));
+  assert.equal(G.setSeries(s, 2), true);
+  const playOut = () => {
+    ['A', 'B'].forEach((id, i) => G.startRoll(s, id, 6 - i));
+    for (let n = 1; n <= 12; n++) s.players[0].sheet[n] = 5;
+    s.players[0].sheet[12] = 4;
+    G.roll(s, [6, 6, 1, 2, 3, 4]);
+    G.chooseNumber(s, 12);
+  };
+  G.begin(s);
+  assert.equal(G.setSeries(s, 5), false); // nur in der Lobby änderbar
+  playOut();
+  assert.equal(s.round, 1);
+  assert.equal(G.seriesDone(s), false);
+  G.begin(s);
+  playOut();
+  assert.equal(s.round, 2);
+  assert.equal(G.seriesDone(s), true);
+  assert.equal(s.players[0].total, 780);
+  assert.equal(G.begin(s), false);
+  assert.equal(G.newSeries(s), true);
+  assert.equal(s.round, 1);
+  assert.deepEqual(s.players.map((p) => p.total), [0, 0]);
+  assert.equal(s.phase, 'start');
+});
+
 test('Solo-Spiel: kein Startwurf, nach Zugende wieder selbst dran', () => {
   const s = started(['Solo']);
   assert.equal(s.phase, 'play');

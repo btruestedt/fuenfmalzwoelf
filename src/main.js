@@ -46,6 +46,26 @@ const app = {
 };
 store.set('pid', app.myId);
 
+/** Punkte mit Vorzeichen (echtes Minuszeichen). */
+const pts = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
+
+// ---------- Zwischenspeichern im Browser ----------
+// Lokale Spiele leben nur hier; Online-Spiele liegen zusätzlich auf dem Server.
+
+function persist() {
+  if (app.mode === 'local') store.set('local', JSON.stringify(app.state));
+  else if (app.mode === 'online') store.set('online', JSON.stringify({ room: app.room, state: app.state }));
+}
+
+function savedOnline(code) {
+  try {
+    const o = JSON.parse(store.get('online'));
+    return o?.room === code ? o.state : null;
+  } catch {
+    return null;
+  }
+}
+
 let view = null;
 let viewFresh = true;
 
@@ -87,6 +107,7 @@ async function pump() {
     }
     if (app.state?.current !== it.state.current) app.viewPid = null;
     app.state = it.state;
+    persist();
     render();
     if (!it.force) announce(it.state);
     it.then?.();
@@ -110,11 +131,12 @@ function startOnline(code, create) {
   app.mode = 'online';
   app.room = code;
   history.replaceState(null, '', `#${code}`);
+  store.set('room', code);
   app.net = new Net({
     room: code,
     pid: app.myId,
     create,
-    getState: () => app.state,
+    getState: () => app.state ?? savedOnline(code),
     onStatus: (up) => {
       app.connected = up;
       render();
@@ -159,6 +181,7 @@ function onNet(m) {
         app.net.close();
         startOnline(randomCode(), true);
       } else {
+        if (m.code === 'noroom' && store.get('room') === app.room) store.set('room', '');
         leave(m.code === 'noroom' ? `Raum ${app.room} gibt es nicht (mehr).` : 'Beitritt nicht möglich.');
       }
       break;
@@ -262,8 +285,17 @@ function render() {
   const screen = !app.mode ? 'home' : !s ? 'wait' : s.phase === 'lobby' ? 'lobby' : 'game';
   for (const id of ['home', 'wait', 'lobby', 'game']) $(`#${id}`).hidden = id !== screen;
   if (screen === 'wait') $('#wait-title').textContent = `Verbinde mit Raum ${app.room} …`;
+  if (screen === 'home') renderHome();
   if (screen === 'lobby') renderLobby(s);
   if (screen === 'game') renderGame(s);
+}
+
+function renderHome() {
+  const items = [];
+  const room = store.get('room');
+  if (room) items.push(`<button class="btn" data-act="resume-room">Raum ${esc(room)} fortsetzen</button>`);
+  if (store.get('local')) items.push('<button class="btn" data-act="resume-local">Spiel an diesem Gerät fortsetzen</button>');
+  $('#resume').innerHTML = items.join('');
 }
 
 function renderLobby(s) {
@@ -294,11 +326,17 @@ function renderLobby(s) {
       ${head}
       <ul class="plist">${list}</ul>
       ${add}
+      <div class="seg" role="group" aria-label="Anzahl Spiele">
+        <span class="lbl">Spiele in Folge</span>
+        ${[1, 5, 10, 20]
+          .map((n) => `<button class="${(s.series || 1) === n ? 'on' : ''}" data-act="series" data-n="${n}">${n}</button>`)
+          .join('')}
+      </div>
       <button class="btn" data-act="start">Spiel starten</button>
       <p class="hint">${
         online
-          ? 'Sobald alle da sind, kann jeder das Spiel starten.'
-          : 'Das Gerät wird reihum weitergegeben. Auch alleine spielbar.'
+          ? 'Sobald alle da sind, kann jeder das Spiel starten. Der Stand bleibt gespeichert: Ihr könnt jederzeit pausieren und mit demselben Raumcode weiterspielen.'
+          : 'Das Gerät wird reihum weitergegeben. Auch alleine spielbar. Der Stand bleibt auf diesem Gerät gespeichert.'
       }</p>
       <button class="btn ghost small" data-act="leave">Zurück</button>
     </div>`;
@@ -313,6 +351,8 @@ function renderGame(s) {
     s.players[0];
   const target = s.phase === 'play' && viewed.id === cur ? s.turn.target : null;
 
+  const multi = (s.series || 1) > 1;
+  const showTotals = multi && (s.round > 1 || s.phase === 'over');
   const chips = s.players
     .map((p) => {
       const got = p.sheet.slice(1).reduce((a, c) => a + Math.min(c, G.NEED), 0);
@@ -323,7 +363,7 @@ function renderGame(s) {
         online && !app.peers.includes(p.id) ? 'off' : '',
       ].join(' ');
       return `<button class="${cls}" data-act="view" data-pid="${esc(p.id)}">
-          <span class="nm">${esc(p.name)}</span>
+          <span class="nm">${esc(p.name)}${showTotals ? ` <em>${pts(p.total || 0)}</em>` : ''}</span>
           <span class="pg"><i style="width:${(got / (G.MAXN * G.NEED)) * 100}%"></i></span>
         </button>`;
     })
@@ -338,6 +378,7 @@ function renderGame(s) {
   }).join('');
   $('#score').innerHTML = `<div class="bar">
       <div class="chips">${chips}</div>
+      ${multi ? `<span class="round">${s.round}/${s.series}</span>` : ''}
       <button class="icon ${sound.isMuted() ? 'off' : ''}" data-act="mute" aria-label="Ton">♪</button>
       <button class="icon" data-act="leave" aria-label="Spiel verlassen">×</button>
     </div>
@@ -364,6 +405,17 @@ function controlsHTML(s) {
   const me = actor();
   const shakeHint = app.shake ? '<p class="sub">oder Handy schütteln</p>' : '';
 
+  // Online im laufenden Spiel, aber kein Mitspieler: zuschauen oder einen verwaisten Platz übernehmen.
+  if (app.mode === 'online' && !s.players.some((p) => p.id === app.myId)) {
+    const free = s.players.filter((p) => !app.peers.includes(p.id));
+    const seats = free
+      .map((p) => `<button class="opt" data-act="seat" data-pid="${esc(p.id)}">${esc(p.name)}</button>`)
+      .join('');
+    return `<p class="status">Du schaust zu</p>${
+      free.length ? `<p class="sub">Warst du schon dabei? Dann übernimm deinen Platz:</p><div class="choices">${seats}</div>` : ''
+    }`;
+  }
+
   if (s.phase === 'start') {
     const st = s.start;
     const rows = s.players
@@ -382,11 +434,13 @@ function controlsHTML(s) {
 
   if (s.phase === 'over') {
     const mine = isMe(s.winner);
-    const pts = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
-    const showTotal = (s.round || 1) > 1;
+    const multi = (s.series || 1) > 1;
+    const done = G.seriesDone(s);
+    const showTotal = multi;
+    const rank = (p) => (done && multi ? p.total || 0 : s.scores[p.id]);
     const rows = s.scores
       ? [...s.players]
-          .sort((a, b) => s.scores[b.id] - s.scores[a.id])
+          .sort((a, b) => rank(b) - rank(a))
           .map(
             (p) => `<tr class="${p.id === s.winner ? 'win' : ''}">
               <td>${esc(p.name)}</td>
@@ -399,15 +453,27 @@ function controlsHTML(s) {
     const table =
       rows && s.players.length > 1
         ? `<table class="scores">
-            ${showTotal ? '<tr><th></th><th>Runde</th><th>Gesamt</th></tr>' : ''}
+            ${showTotal ? '<tr><th></th><th>Spiel</th><th>Gesamt</th></tr>' : ''}
             ${rows}
           </table>`
         : '';
-    return `<p class="status"><b>${mine ? 'Du hast' : `${esc(playerName(s.winner))} hat`} gewonnen!</b></p>
+    let headline = `${mine ? 'Du hast' : `${esc(playerName(s.winner))} hat`} gewonnen!`;
+    if (done && multi && s.players.length > 1) {
+      const best = Math.max(...s.players.map((p) => p.total || 0));
+      const champs = s.players.filter((p) => (p.total || 0) === best);
+      headline =
+        champs.length > 1
+          ? 'Die Spielfolge endet unentschieden!'
+          : isMe(champs[0].id)
+            ? 'Du gewinnst die Spielfolge!'
+            : `${esc(champs[0].name)} gewinnt die Spielfolge!`;
+    }
+    return `${multi ? `<p class="sub">Spiel ${s.round} von ${s.series}${done ? ' – Folge beendet' : ''}</p>` : ''}
+      <p class="status"><b>${headline}</b></p>
       ${table}
       <div class="row">
-        <button class="btn" data-act="again">Neue Runde</button>
-        <button class="btn ghost" data-act="leave">Beenden</button>
+        <button class="btn" data-act="again">${done ? (multi ? 'Neue Spielfolge' : 'Neue Runde') : 'Nächstes Spiel'}</button>
+        <button class="btn ghost" data-act="leave">${done ? 'Beenden' : 'Pause'}</button>
       </div>`;
   }
 
@@ -488,7 +554,7 @@ const actions = {
   },
   remove: (el) => dispatch((s) => G.removePlayer(s, el.dataset.pid)),
   start: () => dispatch((s) => G.begin(s)),
-  again: () => dispatch((s) => G.begin(s)),
+  again: () => dispatch((s) => (G.seriesDone(s) ? G.newSeries(s) : G.begin(s))),
   roll: doRoll,
   num: (el) => actor() && dispatch((s) => G.chooseNumber(s, Number(el.dataset.n))),
   hits: (el) => actor() && dispatch((s) => G.chooseHits(s, Number(el.dataset.i))),
@@ -510,10 +576,31 @@ const actions = {
       }
     } catch {}
   },
-  leave() {
-    const s = app.state;
-    if (s && (s.phase === 'play' || s.phase === 'start') && !confirm('Spiel wirklich verlassen?')) return;
-    leave();
+  // Verlassen ist immer nur eine Pause: Der Stand bleibt gespeichert und lässt sich fortsetzen.
+  leave: () => leave(),
+  series: (el) => dispatch((s) => G.setSeries(s, Number(el.dataset.n))),
+  async 'resume-room'() {
+    readName();
+    await arm();
+    startOnline(store.get('room'), false);
+  },
+  async 'resume-local'() {
+    await arm();
+    try {
+      const s = JSON.parse(store.get('local'));
+      app.mode = 'local';
+      enqueue({ state: s, force: true });
+    } catch {
+      store.set('local', '');
+      render();
+    }
+  },
+  /** Platz eines abwesenden Spielers übernehmen (neues Gerät, gelöschte Browserdaten). */
+  seat(el) {
+    app.myId = el.dataset.pid;
+    store.set('pid', app.myId);
+    app.net.pid = app.myId;
+    app.net.ws?.close(); // verbindet sich sofort unter der neuen Kennung wieder
   },
 };
 

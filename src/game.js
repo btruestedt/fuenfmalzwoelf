@@ -14,7 +14,35 @@ const freshDice = () =>
 const freshTurn = () => ({ dice: freshDice(), target: null, step: 'roll', options: null, groups: 0 });
 
 export function newGame() {
-  return { v: 0, phase: 'lobby', players: [], current: 0, start: null, turn: null, events: [], winner: null };
+  return {
+    v: 0,
+    phase: 'lobby',
+    players: [],
+    series: 20, // so viele Spiele umfasst eine Spielfolge
+    round: 0, // laufendes Spiel innerhalb der Folge (1-basiert, 0 = noch nicht begonnen)
+    current: 0,
+    start: null,
+    turn: null,
+    events: [],
+    winner: null,
+  };
+}
+
+export function setSeries(s, n) {
+  if (s.phase !== 'lobby' || !Number.isInteger(n) || n < 1 || n > 99) return false;
+  s.series = n;
+  return true;
+}
+
+/** Ist das letzte Spiel der Folge gespielt? */
+export const seriesDone = (s) => (s.round || 0) >= (s.series || 1);
+
+/** Nach dem Ende einer Folge: Gesamtpunkte zurücksetzen und von vorn beginnen. */
+export function newSeries(s) {
+  if (s.phase !== 'over') return false;
+  s.players.forEach((p) => (p.total = 0));
+  s.round = 0;
+  return begin(s);
 }
 
 export function addPlayer(s, id, name) {
@@ -57,6 +85,7 @@ export function removePlayer(s, id) {
 /** Startet eine (neue) Partie: Bögen leeren, Startwurf ansetzen. */
 export function begin(s) {
   if (!s.players.length || s.phase === 'start' || s.phase === 'play') return false;
+  if (s.phase === 'over' && seriesDone(s)) return false; // dann nur noch newSeries()
   s.players.forEach((p) => (p.sheet = emptySheet()));
   s.winner = null;
   s.scores = null;
