@@ -139,6 +139,7 @@ function startOnline(code, create) {
     getState: () => app.state ?? savedOnline(code),
     onStatus: (up) => {
       app.connected = up;
+      if (up) checkVersion(); // nach einem Server-Neustart liegt oft eine neue Version bereit
       render();
     },
     on: onNet,
@@ -562,6 +563,7 @@ const actions = {
     app.viewPid = el.dataset.pid;
     render();
   },
+  update: applyUpdate,
   mute() {
     sound.setMuted(!sound.isMuted());
     render();
@@ -622,11 +624,52 @@ document.addEventListener('keydown', (e) => {
 setShakeHandler(doRoll);
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && app.mode) navigator.wakeLock?.request('screen').catch(() => {});
+  if (document.visibilityState !== 'visible') return;
+  if (app.mode) navigator.wakeLock?.request('screen').catch(() => {});
+  checkVersion();
 });
+
+// ---------- Hinweis auf eine neue Version ----------
+// Beim Bauen wird eine Kennung in den Code und in /version.json geschrieben. Weicht die Datei
+// auf dem Server von der laufenden App ab, gibt es eine neuere Version.
+
+const BUILD = __BUILD__;
+let updateShown = false;
+
+async function checkVersion() {
+  if (import.meta.env.DEV || updateShown) return;
+  try {
+    const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+    const { build } = await res.json();
+    if (!build || build === BUILD) return;
+  } catch {
+    return; // offline: später erneut versuchen
+  }
+  // Auf der Startseite geht nichts verloren: einmal still neu laden. Im Spiel nur hinweisen.
+  let tried = null;
+  try {
+    tried = sessionStorage.getItem('wuerfel.reloaded');
+    sessionStorage.setItem('wuerfel.reloaded', BUILD);
+  } catch {}
+  if (!app.mode && tried !== BUILD) return void applyUpdate();
+  updateShown = true;
+  $('#update').hidden = false;
+}
+
+async function applyUpdate() {
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    await reg?.update();
+  } catch {}
+  location.reload();
+}
+
+setInterval(checkVersion, 10 * 60 * 1000);
+checkVersion();
 
 // Start: Name und ggf. Raumcode aus dem Einladungslink vorbelegen.
 $('#name').value = app.name;
+$('#version').textContent = `Version ${BUILD}`;
 const invited = location.hash.slice(1).toUpperCase();
 if (/^[A-Z0-9]{4,8}$/.test(invited)) $('#code').value = invited;
 render();
