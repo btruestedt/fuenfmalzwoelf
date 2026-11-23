@@ -18,13 +18,14 @@ export function newGame() {
     v: 0,
     phase: 'lobby',
     players: [],
-    series: 20, // so viele Spiele umfasst eine Spielfolge
+    series: 5, // so viele Spiele umfasst eine Spielfolge
     round: 0, // laufendes Spiel innerhalb der Folge (1-basiert, 0 = noch nicht begonnen)
     current: 0,
     start: null,
     turn: null,
     events: [],
     winner: null,
+    waiting: [], // Spätankömmlinge { id, name }, die ab dem nächsten Spiel mitspielen
     history: [], // beendete Spiele der laufenden Folge, siehe scoreRound()
   };
 }
@@ -50,8 +51,64 @@ export function newSeries(s) {
 export function addPlayer(s, id, name) {
   if (s.phase !== 'lobby' || s.players.length >= MAX_PLAYERS) return false;
   if (s.players.some((p) => p.id === id)) return false;
-  s.players.push({ id, name, sheet: emptySheet(), total: 0, turns: 0, at12: null });
+  s.players.push(newPlayer(s, id, name));
   return true;
+}
+
+/** Neuer Spieler; gleiche Namen werden durchnummeriert („Spieler“, „Spieler 2“ …). */
+function newPlayer(s, id, name) {
+  const taken = (n) => s.players.some((p) => p.name === n);
+  let unique = name;
+  for (let i = 2; taken(unique); i++) unique = `${name} ${i}`;
+  return { id, name: unique, sheet: emptySheet(), total: 0, turns: 0, at12: null };
+}
+
+/**
+ * Wie kann jemand jetzt noch einsteigen? 'now' = sofort (Lobby, Startwurf, erste Runde),
+ * 'next' = ab dem nächsten Spiel, null = gar nicht (schon dabei oder voll).
+ */
+export function joinMode(s, id) {
+  const waiting = s.waiting || [];
+  if (s.players.some((p) => p.id === id) || waiting.some((w) => w.id === id)) return null;
+  if (s.players.length + waiting.length >= MAX_PLAYERS) return null;
+  if (s.phase === 'lobby' || s.phase === 'start') return 'now';
+  return s.phase === 'play' && s.players.every((p) => (p.turns || 0) <= 1) ? 'now' : 'next';
+}
+
+/** Einsteigen, auch wenn das Spiel schon läuft. */
+export function join(s, id, name) {
+  const mode = joinMode(s, id);
+  if (!mode) return false;
+  if (s.phase === 'lobby') return addPlayer(s, id, name);
+  s.events = [];
+  if (mode === 'next') {
+    (s.waiting ||= []).push({ id, name });
+    return true;
+  }
+  const p = newPlayer(s, id, name);
+  if (s.phase === 'start') {
+    // Läuft noch kein Stechen, darf der Neue beim Startwurf mitmachen.
+    if (s.start.contenders.length === s.players.length) s.start.contenders.push(id);
+    s.players.push(p);
+  } else {
+    s.players.splice(s.current + 1, 0, p); // kommt als Nächster dran
+  }
+  return true;
+}
+
+export function leaveWaiting(s, id) {
+  const i = (s.waiting || []).findIndex((w) => w.id === id);
+  if (i < 0) return false;
+  s.waiting.splice(i, 1);
+  s.events = [];
+  return true;
+}
+
+/** Laufendes Spiel verwerfen und mit den Wartenden neu beginnen (zählt nicht als eigenes Spiel). */
+export function restart(s) {
+  if ((s.phase !== 'play' && s.phase !== 'start') || !s.waiting?.length) return false;
+  s.round--;
+  return setup(s);
 }
 
 /** Fehlende Augen eines Blatts: jede noch fehlende Zahl zählt mit ihrem Wert. */
@@ -98,6 +155,12 @@ export function removePlayer(s, id) {
 export function begin(s) {
   if (!s.players.length || s.phase === 'start' || s.phase === 'play') return false;
   if (s.phase === 'over' && seriesDone(s)) return false; // dann nur noch newSeries()
+  return setup(s);
+}
+
+function setup(s) {
+  for (const w of s.waiting || []) s.players.push(newPlayer(s, w.id, w.name));
+  s.waiting = [];
   s.players.forEach((p) => {
     p.sheet = emptySheet();
     p.turns = 0; // so oft war der Spieler in diesem Spiel an der Reihe („Runden“)
@@ -182,6 +245,9 @@ export function numberOptions(sheet, dice) {
 
 export const activeDice = (turn) => turn.dice.filter((d) => !d.taken);
 export const currentPlayer = (s) => s.players[s.current];
+
+/** Runde, in der sich der aktuelle Spieler gerade befindet (zählt ab seinem ersten Wurf). */
+export const currentRound = (s) => (currentPlayer(s).turns || 0) + (s.turn.counted ? 0 : 1);
 
 /** Wurf des aktuellen Spielers; values gehört zu den noch nicht herausgelegten Würfeln. */
 export function roll(s, values) {

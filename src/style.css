@@ -778,8 +778,9 @@ body.busy #controls button {
   position: fixed;
   inset: 0;
   z-index: 5;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: calc(16px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom));
   background: rgba(2, 10, 6, 0.8);
   backdrop-filter: blur(4px);
@@ -792,9 +793,17 @@ body.busy #controls button {
   background: #07130d;
 }
 
-.ovwrap {
+#overview .card > * {
+  flex: none;
+}
+
+#overview .card > .ovwrap {
+  flex: 0 1 auto;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 .ov {
@@ -808,6 +817,7 @@ body.busy #controls button {
 .ov th {
   position: sticky;
   top: 0;
+  z-index: 1;
   max-width: 76px;
   padding: 0 8px 6px;
   overflow: hidden;
@@ -840,4 +850,25 @@ body.busy #controls button {
 .ov td.win,
 .ov tr.sum td {
   color: var(--gold-hi);
+}
+
+.ov tr.sum td {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: #07130d;
+  border-top: 1px solid var(--line);
+}
+
+.rnd {
+  color: var(--gold-hi);
+  font-weight: 600;
+}
+
+#invite {
+  display: grid;
+}
+
+#invite:empty {
+  display: none;
 }

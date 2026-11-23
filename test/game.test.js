@@ -236,3 +236,62 @@ test('Runden: Weiterwürfeln mit sechs neuen Würfeln bleibt dieselbe Runde', ()
   G.roll(s, [6, 6, 6, 6, 6, 6]);
   assert.equal(s.players[0].turns, 2);
 });
+
+test('Sechs Spieler können mitspielen, gleiche Namen werden durchnummeriert', () => {
+  const s = G.newGame();
+  assert.equal(s.series, 5);
+  for (let i = 0; i < 6; i++) assert.equal(G.join(s, `p${i}`, 'Spieler'), true);
+  assert.deepEqual(s.players.map((p) => p.name), ['Spieler', 'Spieler 2', 'Spieler 3', 'Spieler 4', 'Spieler 5', 'Spieler 6']);
+  G.begin(s);
+  s.players.forEach((p, i) => G.startRoll(s, p.id, i === 3 ? 6 : 1));
+  for (const want of [3, 4, 5, 0, 1, 2, 3]) {
+    assert.equal(s.current, want);
+    G.roll(s, [1, 1, 2, 2, 3, 3]);
+    if (s.turn.step === 'chooseNumber') G.chooseNumber(s, 1);
+    if (s.turn.step === 'roll' && s.current === want) G.roll(s, [2, 2, 3, 3]);
+  }
+});
+
+test('Einsteigen beim Startwurf und in der ersten Runde: sofort dabei', () => {
+  const s = G.newGame();
+  ['A', 'B'].forEach((n) => G.join(s, n, n));
+  G.begin(s);
+  G.startRoll(s, 'A', 6);
+  assert.equal(G.join(s, 'C', 'C'), true);
+  G.startRoll(s, 'B', 2);
+  assert.equal(s.phase, 'start'); // C muss noch würfeln
+  G.startRoll(s, 'C', 1);
+  assert.equal(G.currentPlayer(s).id, 'A');
+
+  G.roll(s, [1, 1, 2, 2, 3, 3]);
+  assert.equal(G.currentRound(s), 1);
+  assert.equal(G.join(s, 'D', 'D'), true);
+  assert.equal(G.join(s, 'D', 'D'), false);
+  G.chooseNumber(s, 1);
+  G.roll(s, [2, 2, 3, 3]);
+  assert.equal(G.currentPlayer(s).id, 'D');
+  assert.equal(G.currentRound(s), 1);
+});
+
+test('Einsteigen später im Spiel: ab dem nächsten Spiel oder per Neubeginn', () => {
+  const s = started();
+  s.players[0].turns = 2;
+  assert.equal(G.joinMode(s, 'C'), 'next');
+  assert.equal(G.restart(s), false); // niemand wartet
+  G.join(s, 'C', 'C');
+  assert.equal(G.joinMode(s, 'C'), null);
+  assert.equal(s.players.length, 2);
+  const t = structuredClone(s);
+
+  for (let n = 1; n <= 12; n++) s.players[0].sheet[n] = 5;
+  s.players[0].sheet[12] = 4;
+  G.roll(s, [6, 6, 1, 2, 3, 4]);
+  G.chooseNumber(s, 12);
+  assert.deepEqual(Object.keys(s.scores), ['B', 'A']); // C zählt in diesem Spiel noch nicht
+  G.begin(s);
+  assert.deepEqual(s.players.map((p) => p.id), ['A', 'B', 'C']);
+  assert.deepEqual([s.round, s.start.contenders.length, s.waiting.length], [2, 3, 0]);
+
+  assert.equal(G.restart(t), true);
+  assert.deepEqual([t.round, t.phase, t.players.length, t.players[0].turns], [1, 'start', 3, 0]);
+});

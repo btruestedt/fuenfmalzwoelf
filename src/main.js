@@ -67,6 +67,7 @@ function savedOnline(code) {
   }
 }
 
+let invited = ''; // Raumcode aus dem Einladungslink
 let view = null;
 let viewFresh = true;
 
@@ -123,7 +124,7 @@ function maybeJoin() {
   const s = app.state;
   if (app.mode !== 'online' || app.pending || s.phase !== 'lobby') return;
   if (s.players.some((p) => p.id === app.myId)) return;
-  dispatch((st) => G.addPlayer(st, app.myId, app.name));
+  dispatch((st) => G.join(st, app.myId, app.name));
 }
 
 // ---------- Netzwerk ----------
@@ -151,13 +152,15 @@ function startOnline(code, create) {
 function onNet(m) {
   switch (m.t) {
     case 'joined':
+      app.pending = null; // eine unbestätigte Aktion ging mit der alten Verbindung verloren
       if (!m.state) {
         const s = G.newGame();
         G.addPlayer(s, app.myId, app.name);
         s.v = 1;
         app.net.send({ t: 'state', state: s });
         enqueue({ state: s, force: true });
-      } else if (!app.state || m.state.v >= app.state.v) {
+      } else {
+        // Der Server hat recht, auch wenn hier schon ein nie angekommener Stand angezeigt wird.
         enqueue({ state: m.state, force: true });
       }
       break;
@@ -195,6 +198,7 @@ function leave(error = '') {
   Object.assign(app, { mode: null, state: null, room: null, net: null, connected: false, peers: [], pending: null });
   queue.length = 0;
   app.overview = false;
+  invited = '';
   history.replaceState(null, '', location.pathname);
   $('#home-error').textContent = error;
   $('#home-error').hidden = !error;
@@ -301,6 +305,7 @@ function renderOverview(s) {
   const el = $('#overview');
   el.hidden = !s || !app.overview;
   if (el.hidden) return;
+  const scrolled = el.querySelector('.ovwrap')?.scrollTop || 0;
   const games = s.history || [];
   const head = s.players.map((p) => `<th>${esc(p.name)}</th>`).join('');
   const body = games
@@ -308,8 +313,9 @@ function renderOverview(s) {
       const cells = s.players
         .map((p) => {
           const at = h.at12?.[p.id];
+          if (h.scores[p.id] == null) return '<td>–</td>'; // war in diesem Spiel noch nicht dabei
           return `<td class="${p.id === h.winner ? 'win' : ''}">
-              <b>${h.scores[p.id] == null ? '–' : pts(h.scores[p.id])}</b>
+              <b>${pts(h.scores[p.id])}</b>
               <small>${at ? `12 in R. ${at}` : '12 offen'}</small>
             </td>`;
         })
@@ -332,6 +338,8 @@ function renderOverview(s) {
       }
       <button class="btn ghost small" data-act="overview">Schließen</button>
     </div>`;
+  const wrap = el.querySelector('.ovwrap');
+  if (wrap) wrap.scrollTop = scrolled;
 }
 
 function renderHome() {
@@ -340,7 +348,13 @@ function renderHome() {
   if (room) items.push(`<button class="btn" data-act="resume-room">Raum ${esc(room)} fortsetzen</button>`);
   if (store.get('local')) items.push('<button class="btn" data-act="resume-local">Spiel an diesem Gerät fortsetzen</button>');
   $('#resume').innerHTML = items.join('');
+  // Über einen Einladungslink gekommen: Beitreten ist die Hauptsache, nicht ein eigenes Spiel.
+  const inv = invited && invited !== room ? invited : '';
+  $('#invite').innerHTML = inv ? `<button class="btn" data-act="join">Raum ${esc(inv)} beitreten</button>` : '';
+  $('#create').classList.toggle('ghost', !!inv);
 }
+
+const COUNT = ['', '', 'zweit', 'dritt', 'viert', 'fünft', 'sechst', 'siebt', 'acht'];
 
 function renderLobby(s) {
   const online = app.mode === 'online';
@@ -376,10 +390,10 @@ function renderLobby(s) {
           .map((n) => `<button class="${(s.series || 1) === n ? 'on' : ''}" data-act="series" data-n="${n}">${n}</button>`)
           .join('')}
       </div>
-      <button class="btn" data-act="start">Spiel starten</button>
+      <button class="btn" data-act="start">${online && s.players.length === 1 ? 'Allein starten' : s.players.length > 1 ? `Zu ${COUNT[s.players.length]} starten` : 'Spiel starten'}</button>
       <p class="hint">${
         online
-          ? 'Sobald alle da sind, kann jeder das Spiel starten. Der Stand bleibt gespeichert: Ihr könnt jederzeit pausieren und mit demselben Raumcode weiterspielen.'
+          ? 'Bis zu acht Spieler. Wartet am besten, bis alle in der Liste stehen; dann kann jeder das Spiel starten. Der Stand bleibt gespeichert: Ihr könnt jederzeit pausieren und mit demselben Raumcode weiterspielen.'
           : 'Das Gerät wird reihum weitergegeben. Auch alleine spielbar. Der Stand bleibt auf diesem Gerät gespeichert.'
       }</p>
       <button class="btn ghost small" data-act="leave">Zurück</button>
@@ -450,16 +464,34 @@ function renderGame(s) {
 }
 
 function controlsHTML(s) {
+  const main = turnControlsHTML(s);
+  const waiting = s.waiting || [];
+  if (!waiting.length || !s.players.some((p) => isLocal() || p.id === app.myId)) return main;
+  const names = waiting.map((w) => esc(w.name)).join(', ');
+  const verb = waiting.length > 1 ? 'warten' : 'wartet';
+  return s.phase === 'over'
+    ? `${main}<p class="sub">Neu dabei im nächsten Spiel: ${names}</p>`
+    : `${main}<p class="sub">${names} ${verb} auf das nächste Spiel · <button class="link" data-act="restart">jetzt neu beginnen</button></p>`;
+}
+
+function turnControlsHTML(s) {
   const me = actor();
   const shakeHint = app.shake ? '<p class="sub">oder Handy schütteln</p>' : '';
 
   // Online im laufenden Spiel, aber kein Mitspieler: zuschauen oder einen verwaisten Platz übernehmen.
   if (app.mode === 'online' && !s.players.some((p) => p.id === app.myId)) {
+    const mode = G.joinMode(s, app.myId);
+    if ((s.waiting || []).some((w) => w.id === app.myId)) {
+      return '<p class="status">Du bist ab dem nächsten Spiel dabei</p><p class="sub">Bis dahin schaust du zu.</p>';
+    }
     const free = s.players.filter((p) => !app.peers.includes(p.id));
     const seats = free
       .map((p) => `<button class="opt" data-act="seat" data-pid="${esc(p.id)}">${esc(p.name)}</button>`)
       .join('');
-    return `<p class="status">Du schaust zu</p>${
+    const joinBtn = mode
+      ? `<button class="btn" data-act="enter">${mode === 'now' ? 'Mitspielen' : 'Ab dem nächsten Spiel mitspielen'}</button>`
+      : '';
+    return `<p class="status">Das Spiel läuft schon</p>${joinBtn}${
       free.length ? `<p class="sub">Warst du schon dabei? Dann übernimm deinen Platz:</p><div class="choices">${seats}</div>` : ''
     }`;
   }
@@ -535,6 +567,8 @@ function controlsHTML(s) {
 
   const t = s.turn;
   const cur = G.currentPlayer(s);
+  const series = (s.series || 1) > 1 ? `Spiel ${s.round} von ${s.series} · ` : '';
+  const info = `<p class="sub">${series}<b class="rnd">Runde ${G.currentRound(s)}</b></p>`;
   const who = isMe(cur.id) ? 'Du' : esc(cur.name);
   const verb = (du, er) => (isMe(cur.id) ? du : er);
   if (t.step === 'roll') {
@@ -546,24 +580,24 @@ function controlsHTML(s) {
     const action = me
       ? `<button class="btn" data-act="roll">${n === 6 ? 'Würfeln' : `Mit ${n === 1 ? 'einem Würfel' : `${n} Würfeln`} würfeln`}</button>${shakeHint}`
       : `<p class="sub">${who} würfelt mit ${n === 1 ? 'einem Würfel' : `${n} Würfeln`} …</p>`;
-    return `<p class="status">${status}</p>${action}`;
+    return `${info}<p class="status">${status}</p>${action}`;
   }
   if (t.step === 'chooseNumber') {
-    if (!me) return `<p class="status">${who} wählt eine Zahl …</p>`;
+    if (!me) return `${info}<p class="status">${who} wählt eine Zahl …</p>`;
     const btns = t.options
       .map((o) => `<button class="num" data-act="num" data-n="${o.n}">${o.n}<small>×${o.hits}</small></button>`)
       .join('');
-    return `<p class="status">Welche Zahl sammeln?</p><div class="choices">${btns}</div>`;
+    return `${info}<p class="status">Welche Zahl sammeln?</p><div class="choices">${btns}</div>`;
   }
   if (t.step === 'chooseHits') {
-    if (!me) return `<p class="status">${who} wählt die Würfel …</p>`;
+    if (!me) return `${info}<p class="status">${who} wählt die Würfel …</p>`;
     const btns = t.options
       .map((o, i) => {
         const groups = o.groups.map((ids) => ids.map((id) => miniDie(t.dice[id].v)).join('+')).join(' &nbsp; ');
         return `<button class="opt" data-act="hits" data-i="${i}">${groups}</button>`;
       })
       .join('');
-    return `<p class="status">Mehr Treffer als nötig – welche Würfel nehmen?</p><div class="choices">${btns}</div>`;
+    return `${info}<p class="status">Mehr Treffer als nötig – welche Würfel nehmen?</p><div class="choices">${btns}</div>`;
   }
   return '';
 }
@@ -610,6 +644,11 @@ const actions = {
   },
   remove: (el) => dispatch((s) => G.removePlayer(s, el.dataset.pid)),
   start: () => dispatch((s) => G.begin(s)),
+  /** Als Zuschauer ins laufende Spiel einsteigen. */
+  enter: () => dispatch((s) => G.join(s, app.myId, app.name)),
+  restart() {
+    if (confirm('Das laufende Spiel verwerfen und mit allen neu beginnen?')) dispatch((s) => G.restart(s));
+  },
   again: () => dispatch((s) => (G.seriesDone(s) ? G.newSeries(s) : G.begin(s))),
   roll: doRoll,
   num: (el) => actor() && dispatch((s) => G.chooseNumber(s, Number(el.dataset.n))),
@@ -658,6 +697,7 @@ const actions = {
   },
   /** Platz eines abwesenden Spielers übernehmen (neues Gerät, gelöschte Browserdaten). */
   seat(el) {
+    dispatch((s) => G.leaveWaiting(s, app.myId));
     app.myId = el.dataset.pid;
     store.set('pid', app.myId);
     app.net.pid = app.myId;
@@ -729,9 +769,14 @@ checkVersion();
 // Start: Name und ggf. Raumcode aus dem Einladungslink vorbelegen.
 $('#name').value = app.name;
 $('#version').textContent = `Version ${BUILD}`;
-const invited = location.hash.slice(1).toUpperCase();
-if (/^[A-Z0-9]{4,8}$/.test(invited)) $('#code').value = invited;
-render();
+function readInvite() {
+  const code = location.hash.slice(1).toUpperCase();
+  invited = /^[A-Z0-9]{4,8}$/.test(code) ? code : '';
+  if (invited) $('#code').value = invited;
+  render();
+}
+window.addEventListener('hashchange', () => !app.mode && readInvite());
+readInvite();
 
 // Nur im Entwicklungsmodus: Zugriff auf den Zustand, um Spielsituationen gezielt herzustellen.
 if (import.meta.env.DEV) window.__dbg = { app, G, dispatch };

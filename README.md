@@ -15,12 +15,17 @@ Kein Treffer: Der Nächste ist dran, Gesammeltes bleibt. Wer zuerst alles voll h
 Wertung: Die Verlierer zählen ihre fehlenden Augen zusammen (jede fehlende Zahl mit ihrem Wert) und
 bekommen sie als Minuspunkte, der Gewinner erhält die Summe als Pluspunkte.
 
-Spielfolge: In der Lobby legt man fest, wie viele Spiele eine Folge umfasst (1, 5, 10 oder 20). Die
+Spielfolge: In der Lobby legt man fest, wie viele Spiele eine Folge umfasst (1, 5, 10 oder 20; voreingestellt 5). Die
 Punkte werden über die Folge addiert; wer am Ende vorn liegt, gewinnt die Folge.
 
 Runden: Mitgezählt wird, wie oft jeder Spieler an der Reihe war. Am Spielende steht, in wie vielen Runden
 der Gewinner fertig war und in welcher eigenen Runde jemand die 12 voll hatte. Die Spiele-Übersicht (Tipp
 auf den Zähler „3/20“ oder am Spielende) zeigt das für alle Spiele der Folge.
+
+## Später dazukommen
+
+Bis zu acht Spieler. Wer beim Startwurf oder in der ersten Runde dazukommt, spielt sofort mit („Mitspielen“),
+danach ab dem nächsten Spiel. Die Mitspieler können stattdessen das laufende Spiel mit allen neu beginnen.
 
 ## Pausieren und Fortsetzen
 
@@ -31,7 +36,7 @@ Verlassen ist immer nur eine Pause, auch mitten in einem Spiel.
   Raum und bietet auf der Startseite „Raum … fortsetzen“ an; der Einladungslink funktioniert ebenfalls weiter.
 - **An einem Gerät:** Der Stand liegt im `localStorage` des Browsers.
 - **Anderes Gerät oder gelöschte Browserdaten:** Wer einen laufenden Raum betritt, ohne Mitspieler zu sein,
-  schaut zu und kann den Platz eines gerade abwesenden Spielers übernehmen. Eine Benutzerverwaltung gibt
+  kann einsteigen oder den Platz eines gerade abwesenden Spielers übernehmen. Eine Benutzerverwaltung gibt
   es bewusst nicht.
 
 Die Regeln stehen vollständig in `src/game.js`, die Grenzfälle sind in `test/game.test.js` festgehalten.
