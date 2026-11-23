@@ -237,10 +237,10 @@ test('Runden: Weiterwürfeln mit sechs neuen Würfeln bleibt dieselbe Runde', ()
   assert.equal(s.players[0].turns, 2);
 });
 
-test('Sechs Spieler können mitspielen, gleiche Namen werden durchnummeriert', () => {
+test('Sechs Spieler können mitspielen, ohne Namen werden sie durchnummeriert', () => {
   const s = G.newGame();
   assert.equal(s.series, 5);
-  for (let i = 0; i < 6; i++) assert.equal(G.join(s, `p${i}`, 'Spieler'), true);
+  for (let i = 0; i < 6; i++) assert.equal(G.join(s, `p${i}`, ''), true);
   assert.deepEqual(s.players.map((p) => p.name), ['Spieler', 'Spieler 2', 'Spieler 3', 'Spieler 4', 'Spieler 5', 'Spieler 6']);
   G.begin(s);
   s.players.forEach((p, i) => G.startRoll(s, p.id, i === 3 ? 6 : 1));
@@ -294,4 +294,23 @@ test('Einsteigen später im Spiel: ab dem nächsten Spiel oder per Neubeginn', (
 
   assert.equal(G.restart(t), true);
   assert.deepEqual([t.round, t.phase, t.players.length, t.players[0].turns], [1, 'start', 3, 0]);
+});
+
+test('Namen: doppelte werden abgelehnt, auch bei Wartenden und beim Umbenennen', () => {
+  const s = G.newGame();
+  assert.equal(G.join(s, '1', 'Anna'), true);
+  assert.equal(G.join(s, '2', ' anna'), false);
+  assert.equal(G.addPlayer(s, '2', 'ANNA'), false);
+  assert.equal(G.join(s, '2', 'Bernd'), true);
+  G.begin(s);
+  G.startRoll(s, '1', 6);
+  G.startRoll(s, '2', 1);
+  s.players[0].turns = 2;
+  assert.equal(G.join(s, '3', 'Bernd'), false);
+  assert.equal(G.join(s, '3', 'Cora'), true); // wartet
+  assert.equal(G.nameTaken(s, 'cora'), true);
+  assert.equal(G.rename(s, '2', 'Cora'), false);
+  assert.equal(G.rename(s, '2', 'bernd'), true); // eigener Name in anderer Schreibweise
+  assert.equal(G.rename(s, '3', 'Dora'), true);
+  assert.deepEqual([s.players[1].name, s.waiting[0].name], ['bernd', 'Dora']);
 });

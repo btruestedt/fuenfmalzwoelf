@@ -50,17 +50,40 @@ export function newSeries(s) {
 
 export function addPlayer(s, id, name) {
   if (s.phase !== 'lobby' || s.players.length >= MAX_PLAYERS) return false;
-  if (s.players.some((p) => p.id === id)) return false;
+  if (s.players.some((p) => p.id === id) || nameTaken(s, name, id)) return false;
   s.players.push(newPlayer(s, id, name));
   return true;
 }
 
-/** Neuer Spieler; gleiche Namen werden durchnummeriert („Spieler“, „Spieler 2“ …). */
-function newPlayer(s, id, name) {
-  const taken = (n) => s.players.some((p) => p.name === n);
-  let unique = name;
-  for (let i = 2; taken(unique); i++) unique = `${name} ${i}`;
-  return { id, name: unique, sheet: emptySheet(), total: 0, turns: 0, at12: null };
+const sameName = (a, b) => a.trim().toLocaleLowerCase('de') === b.trim().toLocaleLowerCase('de');
+
+/** Verwendet schon ein anderer (Mit- oder wartender) Spieler diesen Namen? Groß/klein ist egal. */
+export const nameTaken = (s, name, exceptId = null) =>
+  !!name && [...s.players, ...(s.waiting || [])].some((p) => p.id !== exceptId && sameName(p.name, name));
+
+/** Ohne eingegebenen Namen: „Spieler“, „Spieler 2“ … */
+function defaultName(s) {
+  let name = 'Spieler';
+  for (let i = 2; nameTaken(s, name); i++) name = `Spieler ${i}`;
+  return name;
+}
+
+const newPlayer = (s, id, name) => ({
+  id,
+  name: name || defaultName(s),
+  sheet: emptySheet(),
+  total: 0,
+  turns: 0,
+  at12: null,
+});
+
+/** Eigenen Namen ändern, jederzeit möglich. */
+export function rename(s, id, name) {
+  const p = s.players.find((x) => x.id === id) || (s.waiting || []).find((x) => x.id === id);
+  if (!p || !name || p.name === name || nameTaken(s, name, id)) return false;
+  p.name = name;
+  s.events = [];
+  return true;
 }
 
 /**
@@ -78,11 +101,11 @@ export function joinMode(s, id) {
 /** Einsteigen, auch wenn das Spiel schon läuft. */
 export function join(s, id, name) {
   const mode = joinMode(s, id);
-  if (!mode) return false;
+  if (!mode || nameTaken(s, name, id)) return false;
   if (s.phase === 'lobby') return addPlayer(s, id, name);
   s.events = [];
   if (mode === 'next') {
-    (s.waiting ||= []).push({ id, name });
+    (s.waiting ||= []).push({ id, name: name || defaultName(s) });
     return true;
   }
   const p = newPlayer(s, id, name);

@@ -35,7 +35,7 @@ const app = {
   mode: null, // 'local' | 'online'
   state: null,
   myId: store.get('pid') || randomId(),
-  name: store.get('name') || '',
+  name: store.get('name') || '', // zuletzt benutzter Name, '' = keiner eingegeben
   room: null,
   net: null,
   connected: false,
@@ -45,6 +45,7 @@ const app = {
   shake: false,
   overview: false, // Spiele-Übersicht eingeblendet
 };
+if (app.name === 'Spieler') app.name = ''; // ältere Versionen speicherten den Platzhalter mit
 store.set('pid', app.myId);
 
 /** Punkte mit Vorzeichen (echtes Minuszeichen). */
@@ -119,11 +120,26 @@ async function pump() {
   document.body.classList.remove('busy');
 }
 
+const nameError = () => `Den Namen „${app.name}“ verwendet in diesem Raum schon jemand. Bitte gib einen anderen ein.`;
+
 /** Online: Wer den Raum betritt, trägt sich selbst in die Spielerliste ein. */
 function maybeJoin() {
   const s = app.state;
-  if (app.mode !== 'online' || app.pending || s.phase !== 'lobby') return;
-  if (s.players.some((p) => p.id === app.myId)) return;
+  if (app.mode !== 'online' || app.pending || !app.connected) return;
+  const mine = [...s.players, ...(s.waiting || [])].find((p) => p.id === app.myId);
+  if (mine) {
+    // Wer mit geändertem Namen zurückkommt, heißt ab jetzt auch im Spiel so.
+    if (!app.checkName) return;
+    app.checkName = false;
+    if (!app.name || app.name === mine.name) return;
+    if (G.nameTaken(s, app.name, app.myId)) {
+      return leave(nameError(), app.room);
+    }
+    return dispatch((st) => G.rename(st, app.myId, app.name));
+  }
+  app.checkName = false;
+  if (s.phase !== 'lobby') return;
+  if (G.nameTaken(s, app.name)) return leave(nameError(), app.room);
   dispatch((st) => G.join(st, app.myId, app.name));
 }
 
@@ -132,6 +148,7 @@ function maybeJoin() {
 function startOnline(code, create) {
   app.mode = 'online';
   app.room = code;
+  app.checkName = true;
   history.replaceState(null, '', `#${code}`);
   store.set('room', code);
   app.net = new Net({
@@ -193,16 +210,19 @@ function onNet(m) {
   }
 }
 
-function leave(error = '') {
+/** @param {string} again Raumcode, der auf der Startseite vorbelegt bleibt */
+function leave(error = '', again = '') {
   app.net?.close();
   Object.assign(app, { mode: null, state: null, room: null, net: null, connected: false, peers: [], pending: null });
   queue.length = 0;
   app.overview = false;
   invited = '';
   history.replaceState(null, '', location.pathname);
+  if (again) $('#code').value = again;
   $('#home-error').textContent = error;
   $('#home-error').hidden = !error;
   render();
+  if (again) $('#name').select();
 }
 
 // ---------- Wer darf gerade handeln? ----------
@@ -378,7 +398,8 @@ function renderLobby(s) {
       ? `<div class="join">
            <input id="add-name" maxlength="14" placeholder="Weiterer Name" />
            <button class="btn ghost small" data-act="add">Hinzufügen</button>
-         </div>`
+         </div>
+         <p id="add-error" class="error" hidden></p>`
       : '';
   $('#lobby').innerHTML = `<div class="card">
       ${head}
@@ -608,12 +629,16 @@ function turnControlsHTML(s) {
 async function arm() {
   sound.unlock();
   navigator.wakeLock?.request('screen').catch(() => {});
+  navigator.storage?.persist?.().catch(() => {}); // Name und Spielstände nicht automatisch löschen
   app.shake = await enableShake();
 }
 
+const cleanName = (v) => v.trim().replace(/\s+/g, ' ');
+
 function readName() {
-  app.name = $('#name').value.trim() || 'Spieler';
+  app.name = cleanName($('#name').value);
   store.set('name', app.name);
+  $('#home-error').hidden = true;
 }
 
 const actions = {
@@ -638,14 +663,20 @@ const actions = {
     enqueue({ state: s, force: true });
   },
   add() {
-    const name = $('#add-name').value.trim();
+    const name = cleanName($('#add-name').value);
+    if (G.nameTaken(app.state, name)) {
+      $('#add-error').textContent = `„${name}“ spielt schon mit. Bitte gib einen anderen Namen ein.`;
+      $('#add-error').hidden = false;
+      return $('#add-name').select();
+    }
     if (name) dispatch((s) => G.addPlayer(s, randomId(), name));
     $('#add-name')?.focus();
   },
   remove: (el) => dispatch((s) => G.removePlayer(s, el.dataset.pid)),
   start: () => dispatch((s) => G.begin(s)),
   /** Als Zuschauer ins laufende Spiel einsteigen. */
-  enter: () => dispatch((s) => G.join(s, app.myId, app.name)),
+  enter: () =>
+    G.nameTaken(app.state, app.name) ? leave(nameError(), app.room) : dispatch((s) => G.join(s, app.myId, app.name)),
   restart() {
     if (confirm('Das laufende Spiel verwerfen und mit allen neu beginnen?')) dispatch((s) => G.restart(s));
   },
@@ -698,6 +729,9 @@ const actions = {
   /** Platz eines abwesenden Spielers übernehmen (neues Gerät, gelöschte Browserdaten). */
   seat(el) {
     dispatch((s) => G.leaveWaiting(s, app.myId));
+    app.name = playerName(el.dataset.pid); // mit dem Platz auch dessen Namen übernehmen
+    store.set('name', app.name);
+    $('#name').value = app.name;
     app.myId = el.dataset.pid;
     store.set('pid', app.myId);
     app.net.pid = app.myId;
@@ -768,6 +802,7 @@ checkVersion();
 
 // Start: Name und ggf. Raumcode aus dem Einladungslink vorbelegen.
 $('#name').value = app.name;
+$('#name').addEventListener('input', readName); // sofort merken, nicht erst beim Spielstart
 $('#version').textContent = `Version ${BUILD}`;
 function readInvite() {
   const code = location.hash.slice(1).toUpperCase();

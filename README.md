@@ -27,6 +27,11 @@ auf den Zähler „3/20“ oder am Spielende) zeigt das für alle Spiele der Fol
 Bis zu acht Spieler. Wer beim Startwurf oder in der ersten Runde dazukommt, spielt sofort mit („Mitspielen“),
 danach ab dem nächsten Spiel. Die Mitspieler können stattdessen das laufende Spiel mit allen neu beginnen.
 
+## Spielernamen
+
+Der zuletzt benutzte Name bleibt im Browser gespeichert und lässt sich auf der Startseite ändern; die Änderung
+gilt beim nächsten Betreten des Raums auch im laufenden Spiel. Pro Raum ist jeder Name nur einmal erlaubt.
+
 ## Pausieren und Fortsetzen
 
 Verlassen ist immer nur eine Pause, auch mitten in einem Spiel.
